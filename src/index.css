@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: oklch(0.97 0.02 250);
+  --color-brand-100: oklch(0.93 0.045 250);
+  --color-brand-500: oklch(0.58 0.17 250);
+  --color-brand-600: oklch(0.51 0.17 250);
+  --color-brand-700: oklch(0.44 0.15 250);
+
+  --color-ink-400: oklch(0.62 0.015 260);
+  --color-ink-500: oklch(0.52 0.02 260);
+  --color-ink-700: oklch(0.36 0.025 260);
+  --color-ink-900: oklch(0.22 0.03 260);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-50 text-ink-900 antialiased;
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+  }
+
+  /* Every failure screen needs a keyboard/switch-reachable primary action
+     (UI_FLOW §11), so the focus ring must stay visible everywhere. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-600;
+  }
+}
+
+@layer components {
+  .field-label {
+    @apply mb-1.5 block text-sm font-medium text-ink-700;
+  }
+
+  .field-input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
+      text-ink-900 shadow-sm transition
+      placeholder:text-ink-400
+      focus:border-brand-500 focus:ring-2 focus:ring-brand-100 focus:outline-none
+      disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-ink-400;
+  }
+
+  .field-hint {
+    @apply mt-1.5 text-xs text-ink-500;
+  }
+}
+
+/* The screen-reader announcements the camera screens rely on (§11). */
+.sr-only-live {
+  @apply sr-only;
+}
