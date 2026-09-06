@@ -135,6 +135,33 @@ export function verify(params: {
   });
 }
 
+// --- Query-only endpoints (§5, §6) -----------------------------------------
+
+/**
+ * `/check`, `/enrolled` and both `/reports/*` take their parameters in the
+ * query string, but they are multipart POSTs — and an EMPTY `FormData`
+ * serializes to a body actix-multipart refuses outright, so every one of them
+ * answered `400 Multipart error: Multipart stream is incomplete` before the
+ * handler ever ran. Repeating the parameters as form fields keeps the body
+ * parseable; the query string stays as the documented interface.
+ *
+ * It also restores pagination on `/enrolled`: `EnrolledListQuery` on the server
+ * deserializes ONLY `id_type`, so `page` and `limit` in the query string are
+ * dropped and the handler reads them from form fields alone — every page
+ * silently came back as page 1 at limit 20.
+ *
+ * Every caller below sends at least one field, so the body is never empty.
+ */
+function paramsForm(
+  fields: Record<string, string | number | undefined>,
+): FormData {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    if (value !== undefined) form.append(key, String(value));
+  }
+  return form;
+}
+
 // --- Check enrolled (§5.4) -------------------------------------------------
 
 export function checkEnrolled(
@@ -142,7 +169,7 @@ export function checkEnrolled(
 ): Promise<AxiosResponse<CheckEnrolledResponse>> {
   return attendanceApi.post(
     `${BASE}/check?person_id=${encodeURIComponent(personId)}`,
-    new FormData(),
+    paramsForm({ person_id: personId }),
   );
 }
 
@@ -158,7 +185,14 @@ export function enrolledList(params: {
     page: String(params.page),
     limit: String(params.limit),
   });
-  return attendanceApi.post(`${BASE}/enrolled?${query}`, new FormData());
+  return attendanceApi.post(
+    `${BASE}/enrolled?${query}`,
+    paramsForm({
+      id_type: params.idType,
+      page: params.page,
+      limit: params.limit,
+    }),
+  );
 }
 
 // --- Reports (§6) ----------------------------------------------------------
@@ -179,7 +213,17 @@ export function reportByDate(params: {
   });
   if (params.idType) query.set("id_type", params.idType);
 
-  return attendanceApi.post(`${BASE}/reports/by-date?${query}`, new FormData());
+  return attendanceApi.post(
+    `${BASE}/reports/by-date?${query}`,
+    paramsForm({
+      from_date: params.fromDate,
+      to_date: params.toDate,
+      // Left undefined for "All" — §6.2 says omit it, never send "".
+      id_type: params.idType,
+      page: params.page,
+      limit: params.limit,
+    }),
+  );
 }
 
 export function reportByPerson(params: {
@@ -198,7 +242,13 @@ export function reportByPerson(params: {
   });
   return attendanceApi.post(
     `${BASE}/reports/by-person?${query}`,
-    new FormData(),
+    paramsForm({
+      person_id: params.personId,
+      from_date: params.fromDate,
+      to_date: params.toDate,
+      page: params.page,
+      limit: params.limit,
+    }),
   );
 }
 
