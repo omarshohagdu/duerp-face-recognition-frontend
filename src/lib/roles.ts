@@ -51,6 +51,10 @@ export const NAV: NavItem[] = [
   // `/attendance/reports`, not the same one opened up: that page also carries
   // the by-date tab, which lists everyone. See `pages/MyAttendance.tsx`.
   { to: "/attendance/my-reports", label: "My attendance", roles: ["member"] },
+  // Read-only, and entirely from the session — nothing here calls the API.
+  // Member-only for now: an admin account is an oversight login, not a person
+  // with an office and a face on file. Add "admin" here if that changes.
+  { to: "/profile", label: "Profile", roles: ["member"] },
 
   // Oversight.
   { to: "/attendance/enrolled", label: "Enrolled users", roles: ["admin"] },

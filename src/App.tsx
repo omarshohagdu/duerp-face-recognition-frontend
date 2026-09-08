@@ -12,6 +12,7 @@ import { LoginLog } from "./pages/LoginLog";
 import { Login } from "./pages/Login";
 import { MarkAttendance } from "./pages/MarkAttendance";
 import { MyAttendance } from "./pages/MyAttendance";
+import { Profile } from "./pages/Profile";
 
 /**
  * Where a bare "/" and every unknown URL land.
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/face-setup" element={<EnrollFace />} />
             <Route path="/attendance/mark" element={<MarkAttendance />} />
             <Route path="/attendance/my-reports" element={<MyAttendance />} />
+            <Route path="/profile" element={<Profile />} />
 
             {/* Oversight: admin only. */}
             <Route path="/attendance/enrolled" element={<EnrolledList />} />

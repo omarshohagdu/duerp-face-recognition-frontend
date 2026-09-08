@@ -13,13 +13,34 @@ const loginClient = axios.create({
   validateStatus: () => true,
 });
 
-/** The DU user object the login response echoes back under `user_data`. */
+/**
+ * The DU user object the login response echoes back under `user_data`.
+ *
+ * Only the fields the UI actually reads are named; DU sends a couple of dozen
+ * (permission strings, audit columns) and the index signature keeps them
+ * reachable without pretending this is the full contract. Almost everything is
+ * optional and much of it is genuinely null in production — `emp_name`,
+ * `mobile` and `image` are all null on real accounts — so nothing here may be
+ * rendered without a fallback.
+ */
 export interface DuUser {
   user_id?: number;
   emp_id?: string | null;
   username?: string;
   user_role?: string;
+  /** DU sends the person's name as `emp_name`; `name` is the older spelling. */
   name?: string;
+  emp_name?: string | null;
+  email?: string | null;
+  mobile?: string | null;
+  /** Office. `body_code` is what `employees.office` holds and geo-fences key off. */
+  body_name?: string | null;
+  body_code?: number | string | null;
+  /** Profile photo: a bare filename, to be hung off `image_location`. */
+  image?: string | null;
+  image_location?: string | null;
+  is_active?: number | boolean | null;
+  created_at?: string | null;
   [key: string]: unknown;
 }
 
@@ -108,6 +129,50 @@ export function loadSession(): Session | null {
     // the stored DU user rather than forcing everyone to sign in again on
     // deploy — `roleOf` already treats anything unrecognised as a member.
     return session.role ? session : { ...session, role: roleOf(session.user?.user_role) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * When the bearer token stops being accepted, from its own `exp` claim.
+ *
+ * DECODED, NOT VERIFIED — and that is fine for the only thing it is used for.
+ * The signature cannot be checked in a browser (the secret lives on the
+ * server), so this answers "what does my token say about itself", which is
+ * exactly the question a person asking "when do I get signed out?" means. It is
+ * never an authorisation decision: the server re-checks `exp` on every call and
+ * a tampered value simply gets a 401 there.
+ *
+ * `utils/jwt.rs` issues 730 hours (~30 days). Legacy DU tokens carry `exp` too,
+ * so they read correctly here as well.
+ *
+ * Returns null for anything unreadable rather than throwing — a token this
+ * cannot parse is still a token the server may well accept, so the UI must say
+ * "unknown", never "expired".
+ */
+export function tokenExpiry(token: string): Date | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+
+  try {
+    // base64url -> base64: the JWT alphabet swaps +/ for -_ and drops padding.
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "=",
+    );
+    const claims: unknown = JSON.parse(
+      new TextDecoder().decode(
+        Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)),
+      ),
+    );
+
+    const exp = (claims as { exp?: unknown } | null)?.exp;
+    // `exp` is seconds since the epoch, not milliseconds (RFC 7519 §4.1.4).
+    if (typeof exp !== "number" || !Number.isFinite(exp)) return null;
+    const at = new Date(exp * 1000);
+    return Number.isNaN(at.getTime()) ? null : at;
   } catch {
     return null;
   }
