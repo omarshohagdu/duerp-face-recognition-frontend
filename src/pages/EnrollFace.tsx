@@ -314,6 +314,9 @@ export function EnrollFace() {
             captureLabel={
               captures.length === 0 ? "Take photo" : "Take another photo"
             }
+            // Enrolment collects several photos, so confirming a crop adds one
+            // to the strip rather than finishing anything.
+            confirmLabel="Add photo"
             allowUpload
           />
 

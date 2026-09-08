@@ -197,3 +197,39 @@ export type MappingSaveResponse = Envelope<{
     employee_count: number;
   };
 }> & { warnings?: string[] };
+
+// --- Step logs (admin) -----------------------------------------------------
+
+/** One file in `uploads/login` or `uploads/log`, as the listing returns it. */
+export interface LogFileRow {
+  /** The filename, and the handle `logFile()` reads one back by. */
+  file: string;
+  /**
+   * The id the file is named after. Usually a person id; a login that failed
+   * before DU answered is filed under the submitted username instead, so this
+   * is not always numeric.
+   */
+  person_id: string;
+  /** `YYYY-MM-DD HH:MM:SS`, local wall-clock — the filename carries no zone. */
+  logged_at: string;
+  size_bytes: number;
+  /** `route:` from line 1, e.g. `ext-api/wow-attendance/verify`. Null if unreadable. */
+  route: string | null;
+}
+
+export type LogListResponse = Envelope<{
+  total: number;
+  page: number;
+  limit: number;
+  files: LogFileRow[];
+}>;
+
+export type LogFileResponse = Envelope<{
+  file: string;
+  person_id: string;
+  logged_at: string;
+  size_bytes: number;
+  /** True when the file exceeded the server's 512 KB ceiling and was cut. */
+  truncated: boolean;
+  content: string;
+}>;

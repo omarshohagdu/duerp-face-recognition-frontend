@@ -4,6 +4,7 @@ import { Alert } from "../components/ui/Alert";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
+import { useAdminKey } from "../lib/adminKey";
 import { classifyMapping, networkFailure, type Failure } from "../lib/errors";
 import type { MappingSaveResponse } from "../types/attendance";
 import * as api from "./attendanceApi";
@@ -34,10 +35,10 @@ const EMPTY: Form = {
 
 export function BuildingMapping() {
   const [form, setForm] = useState<Form>(EMPTY);
-  // Held in memory for the tab only. It is a shared, long-lived admin secret,
-  // so it is never a VITE_ var (that would ship it in the bundle for any end
-  // user to read) and never written to localStorage (§7.7, §8.2).
-  const [adminKey, setAdminKey] = useState("");
+  // Held in memory for the tab only, and shared with the two log screens that
+  // need the same key — see `lib/adminKey.ts` for why it is never a VITE_ var
+  // and never written to localStorage (§7.7, §8.2).
+  const [adminKey, setAdminKey] = useAdminKey();
   const [confirmTight, setConfirmTight] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<MappingSaveResponse | null>(null);

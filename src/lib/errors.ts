@@ -17,6 +17,7 @@ export type FailureKind =
   | "not-your-face" // 401 token mismatch — NOT session expiry
   | "session" // 401 token expired/missing — re-login
   | "setup" // device/app/network config: route to IT
+  | "admin-key" // X-Admin-Key missing/wrong/unconfigured — re-prompt, don't re-login
   | "support" // data problem: route to HR/support
   | "too-large" // 413
   | "client-bug" // 400s that a correct client cannot produce
@@ -113,6 +114,47 @@ function classifyCommon(status: number, raw?: string): Failure | undefined {
     };
   }
 
+  return undefined;
+}
+
+/**
+ * The two `X-Admin-Key` rejections, shared by every screen that sends one.
+ *
+ * Kept OUT of `classifyCommon` and checked BEFORE it on purpose: both arrive as
+ * a 4xx with a perfectly good bearer token behind them, so falling through to
+ * the generic 401/403 handling would sign the user out over a mistyped key.
+ *
+ * `subject` names what is unavailable when the server has no key configured —
+ * "Geo-fence editing", "Log viewing" — so the copy says which screen is dead.
+ */
+function adminKeyFailure(
+  status: number,
+  raw: string | undefined,
+  subject: string,
+): Failure | undefined {
+  // Fail-closed, not open: an unset WOW_ADMIN_KEY makes these endpoints
+  // unusable rather than public, so this is a server config problem and no
+  // amount of retyping fixes it.
+  if (status === 503 || has(raw, "Admin operations are not configured")) {
+    return {
+      kind: "admin-key",
+      status,
+      raw,
+      title: `${subject} isn't enabled on this server`,
+      detail: "WOW_ADMIN_KEY is not configured. Contact IT.",
+      retryable: false,
+    };
+  }
+  if (has(raw, "X-Admin-Key")) {
+    return {
+      kind: "admin-key",
+      status,
+      raw,
+      title: "Admin key required",
+      detail: "The admin key is missing or wrong. Check it and try again.",
+      retryable: true,
+    };
+  }
   return undefined;
 }
 
@@ -334,6 +376,42 @@ export function classifyVerify(res: AxiosResponse): Failure {
   };
 }
 
+/**
+ * The attendance reports screen. Both endpoints behind it now require the admin
+ * key — `by-date` outright, `by-person` whenever the id is not the caller's own
+ * — so the key failures have to be recognised here as well.
+ */
+export function classifyReports(res: AxiosResponse): Failure {
+  const raw = messageOf(res.data);
+
+  const key = adminKeyFailure(res.status, raw, "Report viewing");
+  if (key) return key;
+
+  return classifyAdmin(res);
+}
+
+/**
+ * The member's own attendance screen. It can only ever ask for the signed-in
+ * person, so a 403 from the ownership check means the session and the id it
+ * derived have drifted apart — a sign-out is the fix, not an admin key.
+ */
+export function classifyMyAttendance(res: AxiosResponse): Failure {
+  const raw = messageOf(res.data);
+
+  if (has(raw, "X-Admin-Key") || has(raw, "only read your own")) {
+    return {
+      kind: "support",
+      status: res.status,
+      raw,
+      title: "We couldn't load your attendance",
+      detail: "Please sign out and sign in again.",
+      retryable: false,
+    };
+  }
+
+  return classifyAdmin(res);
+}
+
 /** Admin screens (enrolled list, reports) — no camera, no geo-fence (§6.5). */
 export function classifyAdmin(res: AxiosResponse): Failure {
   const raw = messageOf(res.data);
@@ -362,6 +440,55 @@ export function classifyAdmin(res: AxiosResponse): Failure {
 }
 
 /**
+ * Step-log screens (§7.7 key). Same two admin-key failures as mapping-save —
+ * and the same reason to keep them apart from a 401: a wrong or missing
+ * `X-Admin-Key` is a 403 with a perfectly good bearer token behind it, so the
+ * user must be asked for the key, never sent back to sign in.
+ */
+export function classifyLogs(res: AxiosResponse): Failure {
+  const raw = messageOf(res.data);
+
+  const key = adminKeyFailure(res.status, raw, "Log viewing");
+  if (key) return key;
+
+  const common = classifyCommon(res.status, raw);
+  if (common) return common;
+
+  if (res.status === 404) {
+    return {
+      kind: "support",
+      status: res.status,
+      raw,
+      // Logs are never rotated by the service but are pruned by hand
+      // (DEPLOYMENT.md), so a file listed a moment ago can genuinely be gone.
+      title: "That log file is gone",
+      detail: "It may have been pruned since the list was loaded.",
+      retryable: false,
+    };
+  }
+
+  if (res.status === 400) {
+    return {
+      kind: "client-bug",
+      status: res.status,
+      raw,
+      title: "That filter wasn't valid",
+      detail: raw,
+      retryable: false,
+    };
+  }
+
+  return {
+    kind: "unknown",
+    status: res.status,
+    raw,
+    title: "Couldn't load the logs",
+    detail: "Something went wrong fetching this. Please try again.",
+    retryable: true,
+  };
+}
+
+/**
  * Mapping-save (§7.6). Two different 403s are reachable from this screen and
  * they need different copy: the IP allow-list one is a device/network problem,
  * the admin-key one is a credentials problem — and the bearer token is fine in
@@ -370,26 +497,8 @@ export function classifyAdmin(res: AxiosResponse): Failure {
 export function classifyMapping(res: AxiosResponse): Failure {
   const raw = messageOf(res.data);
 
-  if (res.status === 503 || has(raw, "Admin operations are not configured")) {
-    return {
-      kind: "setup",
-      status: res.status,
-      raw,
-      title: "Geo-fence editing isn't enabled on this server",
-      detail: "WOW_ADMIN_KEY is not configured. Contact IT.",
-      retryable: false,
-    };
-  }
-  if (has(raw, "X-Admin-Key")) {
-    return {
-      kind: "setup",
-      status: res.status,
-      raw,
-      title: "You don't have permission to change geo-fences",
-      detail: "The admin key is missing or wrong. Check the key and try again.",
-      retryable: true,
-    };
-  }
+  const key = adminKeyFailure(res.status, raw, "Geo-fence editing");
+  if (key) return key;
 
   const common = classifyCommon(res.status, raw);
   if (common) return common;

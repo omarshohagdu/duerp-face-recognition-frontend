@@ -6,6 +6,8 @@ import type {
   EnrolledListResponse,
   EnrollResponse,
   IdType,
+  LogFileResponse,
+  LogListResponse,
   MappingSaveRequest,
   MappingSaveResponse,
   ReportByDateResponse,
@@ -197,6 +199,14 @@ export function enrolledList(params: {
 
 // --- Reports (§6) ----------------------------------------------------------
 
+/**
+ * Both reports now take the admin key.
+ *
+ * `by-date` requires it outright — it returns every check-in the university
+ * made in the range, and there is no per-person version of that question to
+ * fall back to. `by-person` requires it only when `personId` is not the
+ * caller's own; the member's "My attendance" screen therefore sends none.
+ */
 export function reportByDate(params: {
   fromDate: string;
   toDate: string;
@@ -204,6 +214,7 @@ export function reportByDate(params: {
   idType?: IdType;
   page: number;
   limit: number;
+  adminKey: string;
 }): Promise<AxiosResponse<ReportByDateResponse>> {
   const query = new URLSearchParams({
     from_date: params.fromDate,
@@ -223,6 +234,7 @@ export function reportByDate(params: {
       page: params.page,
       limit: params.limit,
     }),
+    { headers: { "X-Admin-Key": params.adminKey } },
   );
 }
 
@@ -232,6 +244,8 @@ export function reportByPerson(params: {
   toDate: string;
   page: number;
   limit: number;
+  /** Omitted when asking for your own records — the token already proves it. */
+  adminKey?: string;
 }): Promise<AxiosResponse<ReportByPersonResponse>> {
   const query = new URLSearchParams({
     person_id: params.personId,
@@ -249,6 +263,11 @@ export function reportByPerson(params: {
       page: params.page,
       limit: params.limit,
     }),
+    // Sent only when there is one. An empty header would be a wrong key rather
+    // than no key, which the server rejects even for your own records.
+    params.adminKey
+      ? { headers: { "X-Admin-Key": params.adminKey } }
+      : undefined,
   );
 }
 
@@ -270,5 +289,52 @@ export function saveMapping(
 ): Promise<AxiosResponse<MappingSaveResponse>> {
   return attendanceApi.post(`${BASE}/mapping-save`, body, {
     headers: { "X-Admin-Key": adminKey },
+  });
+}
+
+// --- Step logs (admin, §7.7 key) -------------------------------------------
+
+/**
+ * The two log readers. Query params only — unlike the older endpoints they
+ * have no clients predating the move off form fields, so there is no second
+ * copy of each parameter to keep in sync.
+ *
+ * `adminKey` is passed per call for the same reason as `saveMapping`: it is a
+ * shared secret that must not be in the bundle or on disk (`lib/adminKey.ts`).
+ */
+export type LogSource = "login" | "attendance";
+
+export function logList(params: {
+  source: LogSource;
+  adminKey: string;
+  personId?: string;
+  fromDate?: string;
+  toDate?: string;
+  page: number;
+  limit: number;
+}): Promise<AxiosResponse<LogListResponse>> {
+  const query = new URLSearchParams({
+    page: String(params.page),
+    limit: String(params.limit),
+  });
+  // Omitted rather than sent empty: a blank `from_date` is a 400, and a blank
+  // `person_id` would filter on the empty string.
+  if (params.personId?.trim()) query.set("person_id", params.personId.trim());
+  if (params.fromDate) query.set("from_date", params.fromDate);
+  if (params.toDate) query.set("to_date", params.toDate);
+
+  return attendanceApi.post(`${BASE}/logs/${params.source}?${query}`, undefined, {
+    headers: { "X-Admin-Key": params.adminKey },
+  });
+}
+
+export function logFile(params: {
+  source: LogSource;
+  adminKey: string;
+  file: string;
+}): Promise<AxiosResponse<LogFileResponse>> {
+  const query = new URLSearchParams({ file: params.file });
+  return attendanceApi.post(`${BASE}/logs/${params.source}?${query}`, undefined, {
+    headers: { "X-Admin-Key": params.adminKey },
   });
 }

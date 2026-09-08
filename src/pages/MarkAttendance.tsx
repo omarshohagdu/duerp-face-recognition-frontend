@@ -296,11 +296,13 @@ export function MarkAttendance() {
             onCapture={(blob) => void submit(blob)}
             disabled={!locationReady}
             disabledReason={null}
-            captureLabel="Mark attendance"
-            // B3: single shot, auto-submit on capture. Verification is a
-            // twice-daily action — a review screen doubles the taps for no
-            // benefit (§4.3). And the photo must be live, so no file picker
+            captureLabel="Take photo"
+            // B3: still a single shot that submits without a separate review
+            // screen — the crop step IS the review, and confirming it is what
+            // marks attendance, so the verb belongs on that button rather than
+            // on the shutter (§4.3). The photo must be live, so no file picker
             // on this path.
+            confirmLabel="Mark attendance"
             allowUpload={false}
           />
         ) : (

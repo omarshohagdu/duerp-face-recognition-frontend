@@ -5,6 +5,9 @@ dist-ssr
 .env
 .env.*
 !.env.example
+# Committed on purpose: same-origin production build config, no secrets in it.
+# Without this the deploy builds with the dev localhost values.
+!.env.production
 .vite
 node_modules/.tmp
 *.log

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { roleOf, type Role } from "../lib/roles";
 import { TOKEN_STORAGE_KEY } from "./attendance";
 
 /**
@@ -33,6 +34,13 @@ export interface Session {
    */
   personId: string;
   isStudent: boolean;
+  /**
+   * Which screens this account gets (`lib/roles.ts`). Derived from DU's
+   * `user_role`, and — like everything else in this object — it lives in
+   * localStorage where the user can edit it. It decides navigation only; see
+   * the warning at the top of `lib/roles.ts`.
+   */
+  role: Role;
   displayName: string;
   user: DuUser;
 }
@@ -76,6 +84,7 @@ export async function login(
     username: res.data.username ?? username,
     personId: personIdOf(user),
     isStudent: String(user.user_role ?? "").toLowerCase() === "student",
+    role: roleOf(user.user_role),
     displayName:
       (typeof user.name === "string" && user.name) ||
       res.data.username ||
@@ -94,7 +103,11 @@ export function loadSession(): Session | null {
   if (!raw || !token) return null;
   try {
     const session = JSON.parse(raw) as Session;
-    return session.personId ? session : null;
+    if (!session.personId) return null;
+    // Sessions written before roles existed have no `role`. Re-derive it from
+    // the stored DU user rather than forcing everyone to sign in again on
+    // deploy — `roleOf` already treats anything unrecognised as a member.
+    return session.role ? session : { ...session, role: roleOf(session.user?.user_role) };
   } catch {
     return null;
   }

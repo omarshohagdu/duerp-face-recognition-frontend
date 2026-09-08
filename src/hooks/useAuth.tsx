@@ -12,6 +12,7 @@ import {
   login as apiLogin,
   type Session,
 } from "../api/auth";
+import { clearAdminKey } from "../lib/adminKey";
 
 interface AuthValue {
   session: Session | null;
@@ -30,6 +31,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     clearSession();
+    // The admin key outlives the session otherwise: it is module state, not
+    // React state, so signing out would leave it primed for whoever signs in
+    // next on the same tab.
+    clearAdminKey();
     setSession(null);
   }, []);
 

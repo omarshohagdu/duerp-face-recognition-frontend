@@ -1,18 +1,17 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { navFor } from "../lib/roles";
 import { Button } from "./ui/Button";
-
-const LINKS = [
-  { to: "/attendance/mark", label: "Mark attendance" },
-  { to: "/face-setup", label: "Face setup" },
-  { to: "/attendance/enrolled", label: "Enrolled" },
-  { to: "/attendance/reports", label: "Reports" },
-  { to: "/attendance/buildings", label: "Geo-fences" },
-];
 
 export function Layout() {
   const { session, signOut } = useAuth();
   const navigate = useNavigate();
+
+  // Same table `RequireRole` guards on, so a link is shown exactly when the
+  // route behind it will render (`lib/roles.ts`). `session` is non-null here —
+  // Layout only renders inside RequireAuth — but the fallback keeps the nav
+  // from throwing if that nesting is ever changed.
+  const links = navFor(session?.role ?? "member");
 
   return (
     <div className="flex min-h-full flex-col">
@@ -23,7 +22,7 @@ export function Layout() {
           </span>
 
           <nav className="-mx-1 flex flex-1 flex-wrap items-center gap-1">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
