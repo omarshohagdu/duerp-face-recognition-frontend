@@ -6,7 +6,7 @@ import type { AxiosResponse } from "axios";
  * The distinction that matters is `retryable`: UI_FLOW draws a hard line
  * between "try again" failures (the AI platform is down, the face didn't
  * match, you're too far away) and dead ends the person in front of the camera
- * cannot act on (IP not allow-listed, no office assigned, admin key missing).
+ * cannot act on (IP not allow-listed, no office assigned).
  * Offering "Try again" on the second kind sends someone into a loop.
  */
 export type FailureKind =
@@ -17,7 +17,6 @@ export type FailureKind =
   | "not-your-face" // 401 token mismatch — NOT session expiry
   | "session" // 401 token expired/missing — re-login
   | "setup" // device/app/network config: route to IT
-  | "admin-key" // X-Admin-Key missing/wrong/unconfigured — re-prompt, don't re-login
   | "support" // data problem: route to HR/support
   | "too-large" // 413
   | "client-bug" // 400s that a correct client cannot produce
@@ -114,47 +113,6 @@ function classifyCommon(status: number, raw?: string): Failure | undefined {
     };
   }
 
-  return undefined;
-}
-
-/**
- * The two `X-Admin-Key` rejections, shared by every screen that sends one.
- *
- * Kept OUT of `classifyCommon` and checked BEFORE it on purpose: both arrive as
- * a 4xx with a perfectly good bearer token behind them, so falling through to
- * the generic 401/403 handling would sign the user out over a mistyped key.
- *
- * `subject` names what is unavailable when the server has no key configured —
- * "Geo-fence editing", "Log viewing" — so the copy says which screen is dead.
- */
-function adminKeyFailure(
-  status: number,
-  raw: string | undefined,
-  subject: string,
-): Failure | undefined {
-  // Fail-closed, not open: an unset WOW_ADMIN_KEY makes these endpoints
-  // unusable rather than public, so this is a server config problem and no
-  // amount of retyping fixes it.
-  if (status === 503 || has(raw, "Admin operations are not configured")) {
-    return {
-      kind: "admin-key",
-      status,
-      raw,
-      title: `${subject} isn't enabled on this server`,
-      detail: "WOW_ADMIN_KEY is not configured. Contact IT.",
-      retryable: false,
-    };
-  }
-  if (has(raw, "X-Admin-Key")) {
-    return {
-      kind: "admin-key",
-      status,
-      raw,
-      title: "Admin key required",
-      detail: "The admin key is missing or wrong. Check it and try again.",
-      retryable: true,
-    };
-  }
   return undefined;
 }
 
@@ -377,38 +335,23 @@ export function classifyVerify(res: AxiosResponse): Failure {
 }
 
 /**
- * The attendance reports screen. Both endpoints behind it now require the admin
- * key — `by-date` outright, `by-person` whenever the id is not the caller's own
- * — so the key failures have to be recognised here as well.
+ * The attendance reports screen. Both endpoints behind it are guarded by the
+ * session token alone since the admin key was removed, so there is no failure
+ * here that `classifyAdmin` does not already cover. Kept as a named export so
+ * the screen still says which classifier it speaks — and so a report-only
+ * failure has somewhere to go if one appears.
  */
 export function classifyReports(res: AxiosResponse): Failure {
-  const raw = messageOf(res.data);
-
-  const key = adminKeyFailure(res.status, raw, "Report viewing");
-  if (key) return key;
-
   return classifyAdmin(res);
 }
 
 /**
- * The member's own attendance screen. It can only ever ask for the signed-in
- * person, so a 403 from the ownership check means the session and the id it
- * derived have drifted apart — a sign-out is the fix, not an admin key.
+ * The member's own attendance screen. `by-person` no longer checks that the id
+ * is the caller's own — that check was gated on the admin key and went with it
+ * — so the ownership 403 this used to translate is unreachable, and what is
+ * left is the ordinary admin-screen mapping.
  */
 export function classifyMyAttendance(res: AxiosResponse): Failure {
-  const raw = messageOf(res.data);
-
-  if (has(raw, "X-Admin-Key") || has(raw, "only read your own")) {
-    return {
-      kind: "support",
-      status: res.status,
-      raw,
-      title: "We couldn't load your attendance",
-      detail: "Please sign out and sign in again.",
-      retryable: false,
-    };
-  }
-
   return classifyAdmin(res);
 }
 
@@ -440,16 +383,12 @@ export function classifyAdmin(res: AxiosResponse): Failure {
 }
 
 /**
- * Step-log screens (§7.7 key). Same two admin-key failures as mapping-save —
- * and the same reason to keep them apart from a 401: a wrong or missing
- * `X-Admin-Key` is a 403 with a perfectly good bearer token behind it, so the
- * user must be asked for the key, never sent back to sign in.
+ * Step-log screens (§7.7). The admin key these once carried is gone; a 403 from
+ * here is now the IP allow-list or the app credentials, which `classifyCommon`
+ * already routes to IT.
  */
 export function classifyLogs(res: AxiosResponse): Failure {
   const raw = messageOf(res.data);
-
-  const key = adminKeyFailure(res.status, raw, "Log viewing");
-  if (key) return key;
 
   const common = classifyCommon(res.status, raw);
   if (common) return common;
@@ -489,16 +428,11 @@ export function classifyLogs(res: AxiosResponse): Failure {
 }
 
 /**
- * Mapping-save (§7.6). Two different 403s are reachable from this screen and
- * they need different copy: the IP allow-list one is a device/network problem,
- * the admin-key one is a credentials problem — and the bearer token is fine in
- * the second case, so the user must NOT be sent to re-login.
+ * Mapping-save (§7.6). With the admin key removed the only 403 left here is the
+ * IP allow-list one — a device/network problem `classifyCommon` routes to IT.
  */
 export function classifyMapping(res: AxiosResponse): Failure {
   const raw = messageOf(res.data);
-
-  const key = adminKeyFailure(res.status, raw, "Geo-fence editing");
-  if (key) return key;
 
   const common = classifyCommon(res.status, raw);
   if (common) return common;

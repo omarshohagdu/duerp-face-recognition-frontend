@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { useAdminKey } from "../lib/adminKey";
 import { classifyLogs, networkFailure, type Failure } from "../lib/errors";
 import { fullDateTime, relativeTime } from "../lib/format";
 import * as api from "../pages/attendanceApi";
 import type { LogFileRow } from "../types/attendance";
-import { AdminKeyGate } from "./AdminKeyGate";
 import { LogDetail } from "./LogDetail";
 import { PageHeader } from "./PageHeader";
 import { Alert } from "./ui/Alert";
@@ -54,8 +52,6 @@ export function LogViewer({
   emptyDetail,
   showRoute = true,
 }: Props) {
-  const [adminKey] = useAdminKey();
-
   const [personId, setPersonId] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -77,13 +73,11 @@ export function LogViewer({
   const [open, setOpen] = useState<LogFileRow | null>(null);
 
   const load = useCallback(async () => {
-    if (!adminKey) return; // nothing to send yet; the key prompt is showing
     setLoading(true);
     setFailure(null);
     try {
       const res = await api.logList({
         source,
-        adminKey,
         personId: applied.personId,
         fromDate: applied.fromDate,
         toDate: applied.toDate,
@@ -106,7 +100,7 @@ export function LogViewer({
     } finally {
       setLoading(false);
     }
-  }, [source, adminKey, applied, page]);
+  }, [source, applied, page]);
 
   useEffect(() => {
     void load();
@@ -133,164 +127,155 @@ export function LogViewer({
     <div>
       <PageHeader title={title} description={description} />
 
-      {/* Everything below needs the admin key; the gate renders the prompt
-          instead when it is missing or the server rejected it. */}
-      <AdminKeyGate
-        unlocks="read the logs"
-        failure={failure}
-        onUnlock={() => setFailure(null)}
-      >
-        <Card
-          title="Filters"
-          actions={
-            <Button
-              variant="secondary"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              Refresh
-            </Button>
-          }
-        >
-          <form
-            onSubmit={applyFilters}
-            className="flex flex-wrap items-end gap-3"
+      <Card
+        title="Filters"
+        actions={
+          <Button
+            variant="secondary"
+            onClick={() => void load()}
+            disabled={loading}
           >
-            <div className="min-w-48 flex-1">
-              <label className="field-label" htmlFor="log-person">
-                {idLabel}
-              </label>
-              <input
-                id="log-person"
-                className="field-input font-mono"
-                value={personId}
-                placeholder={idPlaceholder}
-                onChange={(e) => setPersonId(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="log-from">
-                From
-              </label>
-              <input
-                id="log-from"
-                type="date"
-                className="field-input"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="log-to">
-                To
-              </label>
-              <input
-                id="log-to"
-                type="date"
-                className="field-input"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </div>
-            <Button type="submit" disabled={loading}>
-              Apply
-            </Button>
-            {filtered && (
-              <Button type="button" variant="ghost" onClick={clearFilters}>
-                Clear
-              </Button>
-            )}
-          </form>
-        </Card>
-
-        <Card
-          className="mt-6"
-          title={`${total} ${total === 1 ? "entry" : "entries"}`}
+            Refresh
+          </Button>
+        }
+      >
+        <form
+          onSubmit={applyFilters}
+          className="flex flex-wrap items-end gap-3"
         >
-          {failure ? (
-            <Alert
-              tone="danger"
-              title={failure.title}
-              actions={
-                failure.retryable && (
-                  <Button onClick={() => void load()}>Try again</Button>
-                )
-              }
-            >
-              {failure.detail}
-            </Alert>
-          ) : loading ? (
-            <div className="flex items-center gap-3 py-8 text-sm text-ink-500">
-              <Spinner /> Loading…
-            </div>
-          ) : rows.length === 0 ? (
-            <EmptyState
-              title={filtered ? "Nothing matched those filters" : emptyTitle}
-            >
-              {filtered
-                ? "Try a wider date range, or clear the filters."
-                : emptyDetail}
-            </EmptyState>
-          ) : (
-            <>
-              <Table>
-                <thead>
-                  <tr>
-                    <Th>When</Th>
-                    <Th>{idLabel}</Th>
-                    {showRoute && <Th>Call</Th>}
-                    <Th className="text-right">Size</Th>
-                    {/* The View button's column. The label is on the span,
-                        not the cell: `sr-only` is absolutely positioned, and
-                        applying it to the <th> itself takes the cell out of the
-                        table's layout. */}
-                    <Th>
-                      <span className="sr-only">Actions</span>
-                    </Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.file}>
-                      <Td title={fullDateTime(isoOf(row.logged_at))}>
-                        <time dateTime={isoOf(row.logged_at)}>
-                          {relativeTime(isoOf(row.logged_at))}
-                        </time>
-                      </Td>
-                      <Td className="font-mono text-xs">{row.person_id}</Td>
-                      {showRoute && (
-                        <Td className="text-xs text-ink-500">
-                          {row.route ?? "—"}
-                        </Td>
-                      )}
-                      <Td className="text-right tabular-nums text-ink-500">
-                        {formatBytes(row.size_bytes)}
-                      </Td>
-                      <Td className="text-right">
-                        <Button variant="ghost" onClick={() => setOpen(row)}>
-                          View
-                        </Button>
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-
-              <Pagination
-                page={page}
-                limit={LIMIT}
-                total={total}
-                onPage={setPage}
-                busy={loading}
-              />
-            </>
+          <div className="min-w-48 flex-1">
+            <label className="field-label" htmlFor="log-person">
+              {idLabel}
+            </label>
+            <input
+              id="log-person"
+              className="field-input font-mono"
+              value={personId}
+              placeholder={idPlaceholder}
+              onChange={(e) => setPersonId(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="log-from">
+              From
+            </label>
+            <input
+              id="log-from"
+              type="date"
+              className="field-input"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="log-to">
+              To
+            </label>
+            <input
+              id="log-to"
+              type="date"
+              className="field-input"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+            />
+          </div>
+          <Button type="submit" disabled={loading}>
+            Apply
+          </Button>
+          {filtered && (
+            <Button type="button" variant="ghost" onClick={clearFilters}>
+              Clear
+            </Button>
           )}
-        </Card>
-      </AdminKeyGate>
+        </form>
+      </Card>
+
+      <Card
+        className="mt-6"
+        title={`${total} ${total === 1 ? "entry" : "entries"}`}
+      >
+        {failure ? (
+          <Alert
+            tone="danger"
+            title={failure.title}
+            actions={
+              failure.retryable && (
+                <Button onClick={() => void load()}>Try again</Button>
+              )
+            }
+          >
+            {failure.detail}
+          </Alert>
+        ) : loading ? (
+          <div className="flex items-center gap-3 py-8 text-sm text-ink-500">
+            <Spinner /> Loading…
+          </div>
+        ) : rows.length === 0 ? (
+          <EmptyState
+            title={filtered ? "Nothing matched those filters" : emptyTitle}
+          >
+            {filtered
+              ? "Try a wider date range, or clear the filters."
+              : emptyDetail}
+          </EmptyState>
+        ) : (
+          <>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>When</Th>
+                  <Th>{idLabel}</Th>
+                  {showRoute && <Th>Call</Th>}
+                  <Th className="text-right">Size</Th>
+                  {/* The View button's column. The label is on the span,
+                      not the cell: `sr-only` is absolutely positioned, and
+                      applying it to the <th> itself takes the cell out of the
+                      table's layout. */}
+                  <Th>
+                    <span className="sr-only">Actions</span>
+                  </Th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.file}>
+                    <Td title={fullDateTime(isoOf(row.logged_at))}>
+                      <time dateTime={isoOf(row.logged_at)}>
+                        {relativeTime(isoOf(row.logged_at))}
+                      </time>
+                    </Td>
+                    <Td className="font-mono text-xs">{row.person_id}</Td>
+                    {showRoute && (
+                      <Td className="text-xs text-ink-500">
+                        {row.route ?? "—"}
+                      </Td>
+                    )}
+                    <Td className="text-right tabular-nums text-ink-500">
+                      {formatBytes(row.size_bytes)}
+                    </Td>
+                    <Td className="text-right">
+                      <Button variant="ghost" onClick={() => setOpen(row)}>
+                        View
+                      </Button>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+
+            <Pagination
+              page={page}
+              limit={LIMIT}
+              total={total}
+              onPage={setPage}
+              busy={loading}
+            />
+          </>
+        )}
+      </Card>
 
       <LogFileModal
         source={source}
-        adminKey={adminKey}
         row={open}
         onClose={() => setOpen(null)}
       />
@@ -314,12 +299,10 @@ function formatBytes(bytes: number): string {
  */
 function LogFileModal({
   source,
-  adminKey,
   row,
   onClose,
 }: {
   source: api.LogSource;
-  adminKey: string;
   row: LogFileRow | null;
   onClose: () => void;
 }) {
@@ -342,7 +325,7 @@ function LogFileModal({
 
     void (async () => {
       try {
-        const res = await api.logFile({ source, adminKey, file: row.file });
+        const res = await api.logFile({ source, file: row.file });
         if (!live) return;
         const body = res.data;
         if (body?.success === true) {
@@ -363,7 +346,7 @@ function LogFileModal({
     return () => {
       live = false;
     };
-  }, [row, source, adminKey]);
+  }, [row, source]);
 
   return (
     <Modal

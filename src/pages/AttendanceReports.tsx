@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { AdminKeyGate } from "../components/AdminKeyGate";
 import { PageHeader } from "../components/PageHeader";
 import { LiveImageThumb } from "../components/LiveImageThumb";
 import { Alert } from "../components/ui/Alert";
@@ -10,7 +9,6 @@ import { Modal } from "../components/ui/Modal";
 import { Pagination } from "../components/ui/Pagination";
 import { Spinner } from "../components/ui/Spinner";
 import { Table, Td, Th } from "../components/ui/Table";
-import { useAdminKey } from "../lib/adminKey";
 import { classifyReports, networkFailure, type Failure } from "../lib/errors";
 import { dateOnly, describeRange, timeOnly, today } from "../lib/format";
 import type { AttendanceRecord, IdType } from "../types/attendance";
@@ -28,15 +26,6 @@ type Mode = "by-date" | "by-person";
 
 export function AttendanceReports() {
   const [mode, setMode] = useState<Mode>("by-date");
-
-  const [adminKey] = useAdminKey();
-  // Lifted out of the two report components so the gate below can re-open on a
-  // rejected key no matter which tab hit it. Only key failures land here; every
-  // other failure stays where it happened and is rendered in place.
-  const [keyFailure, setKeyFailure] = useState<Failure | null>(null);
-  const noteFailure = (failure: Failure) => {
-    if (failure.kind === "admin-key") setKeyFailure(failure);
-  };
 
   // The date range is held here rather than inside each screen so a drill-down
   // from a by-date row can carry it across (§6.3).
@@ -57,67 +46,54 @@ export function AttendanceReports() {
         description="Only successful check-ins are recorded — rejected attempts are not stored."
       />
 
-      {/* Both endpoints behind these tabs require the admin key: `by-date`
-          always, `by-person` for anyone but yourself. So the gate wraps the
-          whole screen rather than one tab. */}
-      <AdminKeyGate
-        unlocks="run reports"
-        failure={keyFailure}
-        onUnlock={() => setKeyFailure(null)}
+      <div
+        role="tablist"
+        aria-label="Report type"
+        className="mb-4 inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5"
       >
-        <div
-          role="tablist"
-          aria-label="Report type"
-          className="mb-4 inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5"
-        >
-          {(
-            [
-              ["by-date", "By date range"],
-              ["by-person", "By person"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              role="tab"
-              aria-selected={mode === value}
-              onClick={() => setMode(value)}
-              className={[
-                "rounded-md px-4 py-1.5 text-sm font-medium transition",
-                mode === value
-                  ? "bg-white text-ink-900 shadow-sm"
-                  : "text-ink-500 hover:text-ink-900",
-              ].join(" ")}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {(
+          [
+            ["by-date", "By date range"],
+            ["by-person", "By person"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            role="tab"
+            aria-selected={mode === value}
+            onClick={() => setMode(value)}
+            className={[
+              "rounded-md px-4 py-1.5 text-sm font-medium transition",
+              mode === value
+                ? "bg-white text-ink-900 shadow-sm"
+                : "text-ink-500 hover:text-ink-900",
+            ].join(" ")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-        {mode === "by-date" ? (
-          <ByDateReport
-            fromDate={fromDate}
-            toDate={toDate}
-            adminKey={adminKey}
-            onFromDate={setFromDate}
-            onToDate={setToDate}
-            onDrillDown={drillDown}
-            onOpenPhoto={setLightbox}
-            onFailure={noteFailure}
-          />
-        ) : (
-          <ByPersonReport
-            fromDate={fromDate}
-            toDate={toDate}
-            personId={personId}
-            adminKey={adminKey}
-            onFromDate={setFromDate}
-            onToDate={setToDate}
-            onPersonId={setPersonId}
-            onOpenPhoto={setLightbox}
-            onFailure={noteFailure}
-          />
-        )}
-      </AdminKeyGate>
+      {mode === "by-date" ? (
+        <ByDateReport
+          fromDate={fromDate}
+          toDate={toDate}
+          onFromDate={setFromDate}
+          onToDate={setToDate}
+          onDrillDown={drillDown}
+          onOpenPhoto={setLightbox}
+        />
+      ) : (
+        <ByPersonReport
+          fromDate={fromDate}
+          toDate={toDate}
+          personId={personId}
+          onFromDate={setFromDate}
+          onToDate={setToDate}
+          onPersonId={setPersonId}
+          onOpenPhoto={setLightbox}
+        />
+      )}
 
       <Modal
         open={lightbox !== null}
@@ -186,21 +162,17 @@ function DateRangeFields({
 function ByDateReport({
   fromDate,
   toDate,
-  adminKey,
   onFromDate,
   onToDate,
   onDrillDown,
   onOpenPhoto,
-  onFailure,
 }: {
   fromDate: string;
   toDate: string;
-  adminKey: string;
   onFromDate: (v: string) => void;
   onToDate: (v: string) => void;
   onDrillDown: (id: string) => void;
   onOpenPhoto: (url: string) => void;
-  onFailure: (failure: Failure) => void;
 }) {
   /** undefined = "All", which means OMIT the parameter, not send "" (§6.2). */
   const [idType, setIdType] = useState<IdType | undefined>(undefined);
@@ -224,7 +196,6 @@ function ByDateReport({
       const res = await api.reportByDate({
         fromDate,
         toDate,
-        adminKey,
         idType,
         page: nextPage,
         limit: LIMIT,
@@ -234,9 +205,7 @@ function ByDateReport({
         setTotal(res.data.data.total ?? 0);
         setRan({ from: fromDate, to: toDate });
       } else {
-        const f = classifyReports(res);
-        setFailure(f);
-        onFailure(f);
+        setFailure(classifyReports(res));
         setRows(null);
       }
     } catch {
@@ -372,22 +341,18 @@ function ByPersonReport({
   fromDate,
   toDate,
   personId,
-  adminKey,
   onFromDate,
   onToDate,
   onPersonId,
   onOpenPhoto,
-  onFailure,
 }: {
   fromDate: string;
   toDate: string;
   personId: string;
-  adminKey: string;
   onFromDate: (v: string) => void;
   onToDate: (v: string) => void;
   onPersonId: (v: string) => void;
   onOpenPhoto: (url: string) => void;
-  onFailure: (failure: Failure) => void;
 }) {
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<AttendanceRecord[] | null>(null);
@@ -409,7 +374,6 @@ function ByPersonReport({
         personId: personId.trim(),
         fromDate,
         toDate,
-        adminKey,
         page: nextPage,
         limit: LIMIT,
       });
@@ -421,9 +385,7 @@ function ByPersonReport({
         setTotal(res.data.data.total ?? 0);
         setRan({ from: fromDate, to: toDate });
       } else {
-        const f = classifyReports(res);
-        setFailure(f);
-        onFailure(f);
+        setFailure(classifyReports(res));
         setRows(null);
       }
     } catch {

@@ -82,18 +82,20 @@ uploaded names routinely contain spaces. Records predating the 2026-08-19
 uploads move will 404; those render a placeholder, because the attendance record
 is still valid and a broken-image icon reads as though it isn't.
 
-## The admin key
+## There is no admin authorization
 
-`/attendance/buildings` needs `X-Admin-Key` on top of the bearer token. It is a
-**shared, long-lived secret**, and `VITE_*` vars are inlined into the bundle
-where any end user can read them — so it is deliberately **not** an env var
-here. The screen asks the operator to paste it per session and holds it in
-memory for the tab only; it is never written to `localStorage` and never built
-into the bundle.
+The `X-Admin-Key` that used to guard the geo-fence write, the two log readers
+and the attendance reports has been removed from both the SPA and the service.
+Those endpoints now take a valid bearer token and nothing else, so **any account
+that can sign in** can read every check-in the university has recorded, read the
+step logs (usernames, client IPs, GPS coordinates) and move any office's
+geo-fence.
 
-UI_FLOW §8.2 notes the properly-architected answer is a duerp-api-side proxy
-route that holds the key server-side, which does not exist yet. Until it does,
-this screen belongs in front of trusted operators only.
+`lib/roles.ts` hides those screens from a member, but that is navigation, not
+authorization — the token carries no role, and the endpoints answer a hand-made
+request regardless. UI_FLOW §8.2 describes the proper fix, a duerp-api-side
+proxy holding a real credential; until something like it exists, deploy this
+behind a network the whole signed-in population is trusted on.
 
 ## Known gaps, all upstream
 

@@ -4,7 +4,6 @@ import { Alert } from "../components/ui/Alert";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { Spinner } from "../components/ui/Spinner";
-import { useAdminKey } from "../lib/adminKey";
 import { classifyMapping, networkFailure, type Failure } from "../lib/errors";
 import type { MappingSaveResponse } from "../types/attendance";
 import * as api from "./attendanceApi";
@@ -35,10 +34,6 @@ const EMPTY: Form = {
 
 export function BuildingMapping() {
   const [form, setForm] = useState<Form>(EMPTY);
-  // Held in memory for the tab only, and shared with the two log screens that
-  // need the same key — see `lib/adminKey.ts` for why it is never a VITE_ var
-  // and never written to localStorage (§7.7, §8.2).
-  const [adminKey, setAdminKey] = useAdminKey();
   const [confirmTight, setConfirmTight] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<MappingSaveResponse | null>(null);
@@ -102,7 +97,6 @@ export function BuildingMapping() {
           ...(form.radius !== "" ? { radius: radiusNum } : {}),
           is_active: form.isActive,
         },
-        adminKey.trim(),
       );
 
       if (res.data?.success === true) {
@@ -137,26 +131,6 @@ export function BuildingMapping() {
 
       <Card>
         <form onSubmit={onSubmit} className="space-y-5">
-          <div>
-            <label className="field-label" htmlFor="admin-key">
-              Admin key
-            </label>
-            <input
-              id="admin-key"
-              type="password"
-              className="field-input font-mono"
-              value={adminKey}
-              autoComplete="off"
-              onChange={(e) => setAdminKey(e.target.value)}
-            />
-            <p className="field-hint">
-              Kept in this tab only — never saved to this device or built into
-              the app. You'll re-enter it next session.
-            </p>
-          </div>
-
-          <hr className="border-slate-200" />
-
           <div>
             {/* §7.3: this is `ictcell.body.body_code` — a numeric-looking
                 string like 490010 — NOT `body.body_id` ("OES"). A wrong value
@@ -327,7 +301,7 @@ export function BuildingMapping() {
             <Button
               type="submit"
               size="lg"
-              disabled={saving || !adminKey.trim() || (tight && !confirmTight)}
+              disabled={saving || (tight && !confirmTight)}
             >
               {saving && <Spinner className="size-4" />}
               {saving ? "Saving…" : "Save mapping"}

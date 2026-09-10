@@ -17,8 +17,9 @@ import axios from "axios";
  *     outcome, not session expiry. Logging the user out there turns a retry
  *     into a forced re-login that looks like a random logout bug in the field.
  *     Each screen decides what a 401 means; see `classifyError`.
- *  4. X-App-Id / X-App-Password ride on every call (X-Admin-Key is added per
- *     request by the mapping screen only).
+ *  4. X-App-Id / X-App-Password ride on every call. They are the only headers
+ *     this client adds; the per-request `X-Admin-Key` the admin screens used to
+ *     send has been removed along with the server check behind it.
  */
 const attendanceApi = axios.create({
   baseURL: import.meta.env.VITE_ATTENDANCE_END_POINT,

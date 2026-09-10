@@ -200,12 +200,11 @@ export function enrolledList(params: {
 // --- Reports (§6) ----------------------------------------------------------
 
 /**
- * Both reports now take the admin key.
+ * Both reports take the session token and nothing else.
  *
- * `by-date` requires it outright — it returns every check-in the university
- * made in the range, and there is no per-person version of that question to
- * fall back to. `by-person` requires it only when `personId` is not the
- * caller's own; the member's "My attendance" screen therefore sends none.
+ * `by-date` returns every check-in the university made in the range, and
+ * `by-person` answers for any `person_id` asked of it — including one that is
+ * not the caller's. The `X-Admin-Key` that used to gate both is gone.
  */
 export function reportByDate(params: {
   fromDate: string;
@@ -214,7 +213,6 @@ export function reportByDate(params: {
   idType?: IdType;
   page: number;
   limit: number;
-  adminKey: string;
 }): Promise<AxiosResponse<ReportByDateResponse>> {
   const query = new URLSearchParams({
     from_date: params.fromDate,
@@ -234,7 +232,6 @@ export function reportByDate(params: {
       page: params.page,
       limit: params.limit,
     }),
-    { headers: { "X-Admin-Key": params.adminKey } },
   );
 }
 
@@ -244,8 +241,6 @@ export function reportByPerson(params: {
   toDate: string;
   page: number;
   limit: number;
-  /** Omitted when asking for your own records — the token already proves it. */
-  adminKey?: string;
 }): Promise<AxiosResponse<ReportByPersonResponse>> {
   const query = new URLSearchParams({
     person_id: params.personId,
@@ -263,11 +258,6 @@ export function reportByPerson(params: {
       page: params.page,
       limit: params.limit,
     }),
-    // Sent only when there is one. An empty header would be a wrong key rather
-    // than no key, which the server rejects even for your own records.
-    params.adminKey
-      ? { headers: { "X-Admin-Key": params.adminKey } }
-      : undefined,
   );
 }
 
@@ -279,34 +269,31 @@ export function reportByPerson(params: {
  * what this needs and exactly why the client has no default Content-Type
  * (§8.1 hazard 2).
  *
- * `adminKey` is passed in per call rather than read from the environment: it
- * is a shared, long-lived secret and a VITE_ var would ship it in the bundle
- * for any end user to read (§7.7, §8.2).
+ * The write is guarded by the session token alone. It sets the geo-fence every
+ * employee in an office is checked against, and the shared admin key that used
+ * to be required on top of the token has been removed.
  */
 export function saveMapping(
   body: MappingSaveRequest,
-  adminKey: string,
 ): Promise<AxiosResponse<MappingSaveResponse>> {
-  return attendanceApi.post(`${BASE}/mapping-save`, body, {
-    headers: { "X-Admin-Key": adminKey },
-  });
+  return attendanceApi.post(`${BASE}/mapping-save`, body);
 }
 
-// --- Step logs (admin, §7.7 key) -------------------------------------------
+// --- Step logs (§7.7) ------------------------------------------------------
 
 /**
  * The two log readers. Query params only — unlike the older endpoints they
  * have no clients predating the move off form fields, so there is no second
  * copy of each parameter to keep in sync.
  *
- * `adminKey` is passed per call for the same reason as `saveMapping`: it is a
- * shared secret that must not be in the bundle or on disk (`lib/adminKey.ts`).
+ * The session token is the whole gate: these files carry usernames, client IPs
+ * and GPS coordinates, and the `X-Admin-Key` that used to be required as well
+ * has been removed.
  */
 export type LogSource = "login" | "attendance";
 
 export function logList(params: {
   source: LogSource;
-  adminKey: string;
   personId?: string;
   fromDate?: string;
   toDate?: string;
@@ -323,18 +310,13 @@ export function logList(params: {
   if (params.fromDate) query.set("from_date", params.fromDate);
   if (params.toDate) query.set("to_date", params.toDate);
 
-  return attendanceApi.post(`${BASE}/logs/${params.source}?${query}`, undefined, {
-    headers: { "X-Admin-Key": params.adminKey },
-  });
+  return attendanceApi.post(`${BASE}/logs/${params.source}?${query}`);
 }
 
 export function logFile(params: {
   source: LogSource;
-  adminKey: string;
   file: string;
 }): Promise<AxiosResponse<LogFileResponse>> {
   const query = new URLSearchParams({ file: params.file });
-  return attendanceApi.post(`${BASE}/logs/${params.source}?${query}`, undefined, {
-    headers: { "X-Admin-Key": params.adminKey },
-  });
+  return attendanceApi.post(`${BASE}/logs/${params.source}?${query}`);
 }

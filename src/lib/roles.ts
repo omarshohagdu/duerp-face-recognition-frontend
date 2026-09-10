@@ -11,10 +11,13 @@
  * a role at all. Anything here is editable in devtools, so hiding a link hides
  * a link and nothing more.
  *
- * The real boundary stays where it already is:
- *   - enroll/verify match the token's `sub`, so an admin cannot mark someone
- *     else's attendance by unhiding the screen;
- *   - the geo-fence and log endpoints require `X-Admin-Key` server-side.
+ * The one real boundary left is enroll/verify, which match the token's `sub`,
+ * so an admin cannot mark someone else's attendance by unhiding the screen.
+ *
+ * EVERYTHING ELSE IS OPEN TO ANY SIGNED-IN USER. The geo-fence write, the two
+ * log readers and both attendance reports were gated server-side by a shared
+ * `X-Admin-Key`; that check has been removed, so hiding those links from a
+ * member now hides only the links — the endpoints answer anyone with a token.
  *
  * So: add a screen here to put it in front of the right people. Never rely on
  * it to keep anyone out of one.

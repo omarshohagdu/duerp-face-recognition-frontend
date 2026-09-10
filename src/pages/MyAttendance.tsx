@@ -34,10 +34,11 @@ function startOfMonth(): string {
  * reachable. A separate route keeps the member's screen incapable of asking
  * for anyone else's records — there is no input that takes an id.
  *
- * The server enforces the same thing independently: `reports/by-person` now
- * rejects a `person_id` that is not the token's `sub` unless the caller also
- * presents the admin key. So this screen sends NO admin key — the token alone
- * is what entitles it, and a hand-made request cannot widen that.
+ * That separation is now the ONLY thing keeping a member off other people's
+ * records. The server used to reject a `person_id` that was not the token's
+ * `sub` unless the caller presented the admin key; that check went with the
+ * key, so `reports/by-person` answers for anyone a valid token asks about. A
+ * hand-made request is no longer stopped — only this screen's shape is.
  */
 export function MyAttendance() {
   const { session } = useAuth();
