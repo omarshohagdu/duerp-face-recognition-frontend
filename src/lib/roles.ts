@@ -39,46 +39,107 @@ export interface NavItem {
 }
 
 /**
- * The single source of truth for both the header nav and the route guards in
+ * One thing in the header: a link, or a menu holding several.
+ *
+ * Grouping is presentation only — `NAV` below is still the flat list every
+ * guard reads, so a menu can be reorganised without any chance of quietly
+ * opening or closing a route.
+ */
+export type NavEntry =
+  | ({ kind: "link" } & NavItem)
+  | { kind: "menu"; label: string; roles: Role[]; items: NavItem[] };
+
+/**
+ * The single source of truth for the header nav AND the route guards in
  * `App.tsx`. Keeping one list is what stops a hidden link from staying
  * reachable by typing its URL — the guard reads the same `roles` array the nav
  * filtered on.
+ *
+ * ORDER IS THE DISPLAY ORDER, and the first entry a role can see is where "/"
+ * sends them (`homeFor`). Self-service comes first for that reason: a member
+ * lands on check-in, which is the thing they opened the app to do.
+ *
+ * ADMIN SCREENS ARE IN MENUS because there are now seven of them, and seven
+ * flat links wrapped onto two rows is a list nobody reads — the eye stops
+ * finding "Geo-fences" among "Login log" and "Access roles". Three menus named
+ * after the job — what happened, what was recorded, who may do what — is the
+ * organisation the screens already have.
  */
-export const NAV: NavItem[] = [
+export const NAV_ENTRIES: NavEntry[] = [
   // Self-service. An admin account is an oversight account: it has no face to
-  // enroll and no attendance of its own to mark, so these two are hidden from
-  // it rather than shown and then failing on the token check.
-  { to: "/attendance/mark", label: "Mark attendance", roles: ["member"] },
-  { to: "/face-setup", label: "Face setup", roles: ["member"] },
+  // enroll and no attendance of its own to mark, so these are hidden from it
+  // rather than shown and then failing on the token check.
+  { kind: "link", to: "/attendance/mark", label: "Mark attendance", roles: ["member"] },
+  { kind: "link", to: "/face-setup", label: "Face setup", roles: ["member"] },
   // The member's own history. A SEPARATE route from the admin
   // `/attendance/reports`, not the same one opened up: that page also carries
   // the by-date tab, which lists everyone. See `pages/MyAttendance.tsx`.
-  { to: "/attendance/my-reports", label: "My attendance", roles: ["member"] },
+  { kind: "link", to: "/attendance/my-reports", label: "My attendance", roles: ["member"] },
+
+  // Oversight, grouped by the question each screen answers.
+  {
+    kind: "menu",
+    label: "Attendance",
+    roles: ["admin"],
+    items: [
+      { to: "/attendance/reports", label: "Attendance reports", roles: ["admin"] },
+      { to: "/attendance/enrolled", label: "Enrolled users", roles: ["admin"] },
+      { to: "/attendance/buildings", label: "Geo-fences", roles: ["admin"] },
+    ],
+  },
+  {
+    kind: "menu",
+    label: "Logs",
+    roles: ["admin"],
+    items: [
+      { to: "/logs/attendance", label: "Attendance log", roles: ["admin"] },
+      { to: "/logs/login", label: "Login log", roles: ["admin"] },
+    ],
+  },
+  {
+    kind: "menu",
+    label: "Administration",
+    roles: ["admin"],
+    items: [
+      { to: "/access-roles", label: "Access roles", roles: ["admin"] },
+      { to: "/settings/face-verification", label: "Face verification", roles: ["admin"] },
+    ],
+  },
+
   // Read-only, and entirely from the session — nothing here calls the API.
   // Member-only for now: an admin account is an oversight login, not a person
   // with an office and a face on file. Add "admin" here if that changes.
-  { to: "/profile", label: "Profile", roles: ["member"] },
-
-  // Oversight.
-  { to: "/attendance/enrolled", label: "Enrolled users", roles: ["admin"] },
-  { to: "/attendance/reports", label: "Attendance reports", roles: ["admin"] },
-  { to: "/attendance/buildings", label: "Geo-fences", roles: ["admin"] },
-  { to: "/logs/login", label: "Login log", roles: ["admin"] },
-  { to: "/logs/attendance", label: "Attendance log", roles: ["admin"] },
-  // Who may do what, in THIS service's tables — not the ERP's /access-roles,
-  // which writes `ictcell` and no longer reaches the gate here. Hiding it from
-  // a member hides a link; the endpoints behind it refuse without
-  // admin.roles.manage / admin.users.manage, and unlike the rest of the access
-  // layer they enforce that today.
-  { to: "/access-roles", label: "Access roles", roles: ["admin"] },
-  // The NFC face-verification switch. Admin-only here and enforced server-side
-  // by `admin.settings.manage` — turning it off lets card registrations
-  // through without comparing the card photo to the selfie.
-  { to: "/settings/face-verification", label: "Face verification", roles: ["admin"] },
+  { kind: "link", to: "/profile", label: "Profile", roles: ["member"] },
 ];
+
+/**
+ * Every navigable screen, flattened. What the guards read — a menu is a
+ * container, not a destination, so it contributes its children and nothing of
+ * its own.
+ */
+export const NAV: NavItem[] = NAV_ENTRIES.flatMap((entry) =>
+  entry.kind === "link"
+    ? [{ to: entry.to, label: entry.label, roles: entry.roles }]
+    : entry.items,
+);
 
 export function navFor(role: Role): NavItem[] {
   return NAV.filter((item) => item.roles.includes(role));
+}
+
+/**
+ * The header's version: entries in display order, menus keeping only the items
+ * this role may see, and an emptied menu dropped rather than rendered as a
+ * button that opens onto nothing.
+ */
+export function entriesFor(role: Role): NavEntry[] {
+  return NAV_ENTRIES.filter((entry) => entry.roles.includes(role)).flatMap<NavEntry>(
+    (entry) => {
+      if (entry.kind === "link") return [entry];
+      const items = entry.items.filter((item) => item.roles.includes(role));
+      return items.length ? [{ ...entry, items }] : [];
+    },
+  );
 }
 
 export function canSee(role: Role, path: string): boolean {
@@ -86,9 +147,10 @@ export function canSee(role: Role, path: string): boolean {
 }
 
 /**
- * Where "/" and any unknown URL land. Deliberately derived from `navFor` rather
- * than hardcoded: a member's landing page is check-in, an admin's is whatever
- * their first screen happens to be, and neither breaks when NAV is reordered.
+ * Where "/" and any unknown URL land. Deliberately derived from `navFor`
+ * rather than hardcoded: a member's landing page is check-in, an admin's is
+ * whatever their first screen happens to be, and neither breaks when the nav
+ * is reordered.
  */
 export function homeFor(role: Role): string {
   return navFor(role)[0]?.to ?? "/login";
