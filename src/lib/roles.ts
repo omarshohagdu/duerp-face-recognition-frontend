@@ -65,6 +65,12 @@ export const NAV: NavItem[] = [
   { to: "/attendance/buildings", label: "Geo-fences", roles: ["admin"] },
   { to: "/logs/login", label: "Login log", roles: ["admin"] },
   { to: "/logs/attendance", label: "Attendance log", roles: ["admin"] },
+  // Who may do what, in THIS service's tables — not the ERP's /access-roles,
+  // which writes `ictcell` and no longer reaches the gate here. Hiding it from
+  // a member hides a link; the endpoints behind it refuse without
+  // admin.roles.manage / admin.users.manage, and unlike the rest of the access
+  // layer they enforce that today.
+  { to: "/access-roles", label: "Access roles", roles: ["admin"] },
 ];
 
 export function navFor(role: Role): NavItem[] {

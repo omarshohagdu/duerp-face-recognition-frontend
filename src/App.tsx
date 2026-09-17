@@ -4,6 +4,7 @@ import { RequireAuth, RequireRole } from "./components/RequireAuth";
 import { useAuth } from "./hooks/useAuth";
 import { homeFor } from "./lib/roles";
 import { AttendanceLog } from "./pages/AttendanceLog";
+import { AccessRoles } from "./pages/AccessRoles";
 import { AttendanceReports } from "./pages/AttendanceReports";
 import { BuildingMapping } from "./pages/BuildingMapping";
 import { EnrolledList } from "./pages/EnrolledList";
@@ -54,6 +55,7 @@ export default function App() {
             <Route path="/attendance/buildings" element={<BuildingMapping />} />
             <Route path="/logs/login" element={<LoginLog />} />
             <Route path="/logs/attendance" element={<AttendanceLog />} />
+            <Route path="/access-roles" element={<AccessRoles />} />
           </Route>
         </Route>
       </Route>
