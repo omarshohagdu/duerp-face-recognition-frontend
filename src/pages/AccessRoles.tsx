@@ -268,7 +268,7 @@ function RolesTab() {
                 {(id) => (
                   <input
                     id={id}
-                    className="input"
+                    className="field-input"
                     value={newKey}
                     placeholder="card_desk"
                     onChange={(e) => setNewKey(e.target.value)}
@@ -281,7 +281,7 @@ function RolesTab() {
               {(id) => (
                 <input
                   id={id}
-                  className="input"
+                  className="field-input"
                   value={name}
                   placeholder="Card Desk"
                   onChange={(e) => setName(e.target.value)}
@@ -390,7 +390,7 @@ function PeopleTab() {
       >
         <div className="flex gap-2 p-4">
           <input
-            className="input"
+            className="field-input"
             placeholder="Search by id or username"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -437,7 +437,7 @@ function PeopleTab() {
                   </Td>
                   <Td>
                     <select
-                      className="input"
+                      className="field-input"
                       value={u.role ?? ""}
                       disabled={busy === u.person_id}
                       onChange={(e) => void assign(u, e.target.value)}

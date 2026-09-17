@@ -71,6 +71,10 @@ export const NAV: NavItem[] = [
   // admin.roles.manage / admin.users.manage, and unlike the rest of the access
   // layer they enforce that today.
   { to: "/access-roles", label: "Access roles", roles: ["admin"] },
+  // The NFC face-verification switch. Admin-only here and enforced server-side
+  // by `admin.settings.manage` — turning it off lets card registrations
+  // through without comparing the card photo to the selfie.
+  { to: "/settings/face-verification", label: "Face verification", roles: ["admin"] },
 ];
 
 export function navFor(role: Role): NavItem[] {
