@@ -4,9 +4,16 @@ import attendanceApi from "./attendance";
 /**
  * Admin settings — the NFC face-verification switch.
  *
- * `GET|PUT /admin-api/settings/nfc-face-verify`. Both need
+ * `GET|PUT /ext-api/settings/nfc-face-verify`. Both need
  * `admin.settings.manage`, and both **enforce it today** rather than in audit
  * mode, so a 403 here is the real answer.
+ *
+ * WHY `/ext-api` AND NOT `/admin-api`, which is what the API documents: the
+ * production gateway proxies `/ext-api/` as a prefix and has **no rule for
+ * `/admin-api`**, so a browser calling the documented path gets the SPA's own
+ * index.html back with a 200. The service answers on both; this is the one
+ * that reaches it. Switch back when the gateway rule lands —
+ * `docs/DEPLOYMENT.md`, "A path with no proxy rule".
  *
  * `attendanceApi` reads the body on every status, so these hand the envelope
  * back and let the screen branch on `success` — which matters here because a
@@ -76,7 +83,7 @@ function envelope<T>(res: AxiosResponse): Result<T> {
 
 export async function getFaceVerify(): Promise<Result<FaceVerifySettings>> {
   return envelope<FaceVerifySettings>(
-    await attendanceApi.get("/admin-api/settings/nfc-face-verify"),
+    await attendanceApi.get("/ext-api/settings/nfc-face-verify"),
   );
 }
 
@@ -92,5 +99,5 @@ export async function putFaceVerify(
   if (url !== undefined) body.nfc_face_verify_url = url;
   // A plain object, so axios sets `Content-Type: application/json` itself —
   // the header whose absence produced the 400 this helper now surfaces.
-  return envelope(await attendanceApi.put("/admin-api/settings/nfc-face-verify", body));
+  return envelope(await attendanceApi.put("/ext-api/settings/nfc-face-verify", body));
 }
