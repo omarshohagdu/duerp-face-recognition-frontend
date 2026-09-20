@@ -1,3 +1,4 @@
+import type { AxiosResponse } from "axios";
 import attendanceApi from "./attendance";
 
 /**
@@ -47,9 +48,36 @@ export interface Err {
 
 export type Result<T> = Ok<T> | Err;
 
+/**
+ * Read a response as this API's envelope — or report what actually arrived.
+ *
+ * NEVER a blind cast. `validateStatus: () => true` means every status lands
+ * here, and the body is not always JSON: Actix answers a rejected payload with
+ * plain text (`Content type error`), an unregistered method with an empty 404,
+ * and a proxy with no rule for the path with an HTML page. Cast any of those
+ * and `success` reads `undefined` — falsy, so the screen shows an error box
+ * with no message in it. That is how a missing `Content-Type` header stayed
+ * invisible for a day.
+ */
+function envelope<T>(res: AxiosResponse): Result<T> {
+  const { status, data } = res;
+
+  if (data && typeof data === "object" && typeof (data as { success?: unknown }).success === "boolean") {
+    return data as Result<T>;
+  }
+
+  const raw = typeof data === "string" ? data : JSON.stringify(data ?? null);
+  return {
+    success: false,
+    code: `http_${status}`,
+    message: `HTTP ${status} — ${raw && raw !== "null" ? raw.slice(0, 300) : "(empty response body)"}`,
+  };
+}
+
 export async function getFaceVerify(): Promise<Result<FaceVerifySettings>> {
-  const res = await attendanceApi.get("/admin-api/settings/nfc-face-verify");
-  return res.data as Result<FaceVerifySettings>;
+  return envelope<FaceVerifySettings>(
+    await attendanceApi.get("/admin-api/settings/nfc-face-verify"),
+  );
 }
 
 /**
@@ -62,6 +90,7 @@ export async function putFaceVerify(
 ): Promise<Result<{ nfc_face_verify: "ON" | "OFF"; nfc_face_verify_url: string }>> {
   const body: Record<string, string> = { nfc_face_verify: enabled };
   if (url !== undefined) body.nfc_face_verify_url = url;
-  const res = await attendanceApi.put("/admin-api/settings/nfc-face-verify", body);
-  return res.data as Result<{ nfc_face_verify: "ON" | "OFF"; nfc_face_verify_url: string }>;
+  // A plain object, so axios sets `Content-Type: application/json` itself —
+  // the header whose absence produced the 400 this helper now surfaces.
+  return envelope(await attendanceApi.put("/admin-api/settings/nfc-face-verify", body));
 }

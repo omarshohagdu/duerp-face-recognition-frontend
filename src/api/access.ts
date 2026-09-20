@@ -1,3 +1,4 @@
+import type { AxiosResponse } from "axios";
 import attendanceApi from "./attendance";
 
 /**
@@ -64,9 +65,29 @@ export interface AccountRow {
   effective: string[];
 }
 
+/**
+ * Read a response as this API's envelope — or report what actually arrived.
+ * See the note in `api/settings.ts`: a cast turns a plain-text or HTML error
+ * into an envelope whose `status` is undefined, and the screen shows nothing.
+ */
+function envelope<T>(res: AxiosResponse): Envelope<T> {
+  const { status, data } = res;
+
+  if (data && typeof data === "object" && typeof (data as { status?: unknown }).status === "string") {
+    return data as Envelope<T>;
+  }
+
+  const raw = typeof data === "string" ? data : JSON.stringify(data ?? null);
+  return {
+    status: "error",
+    code: `http_${status}`,
+    message: `HTTP ${status} — ${raw && raw !== "null" ? raw.slice(0, 300) : "(empty response body)"}`,
+    data: undefined as T,
+  };
+}
+
 async function post<T>(url: string, body?: unknown): Promise<Envelope<T>> {
-  const res = await attendanceApi.post(url, body);
-  return res.data as Envelope<T>;
+  return envelope<T>(await attendanceApi.post(url, body));
 }
 
 export const listRoles = () => post<{ roles: Role[] }>("/ext-api/access/roles");
