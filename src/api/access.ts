@@ -35,6 +35,15 @@ export interface Role {
   name: string;
   /** Came from the ERP; its key is fixed because duerp-api joins on it. */
   is_system: boolean;
+  /**
+   * Assignable? `false` = retired.
+   *
+   * Narrow on purpose (see the backend's `sql/008`): retiring stops NEW
+   * assignments and leaves everybody already holding the role exactly as they
+   * were. It is housekeeping, never a bulk revocation — `status` and deny
+   * overrides are what take access away, one person at a time.
+   */
+  is_active: boolean;
   members: number;
   permissions: string[];
 }
@@ -110,6 +119,13 @@ export const listUsers = (search: string, limit = 25, offset = 0) =>
     `/ext-api/access/users?search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`,
   );
 
+/** Retire (`false`) or restore (`true`) a role. Refuses to retire `admin`. */
+export const setRoleActive = (key: string, is_active: boolean) =>
+  post<{ key: string; is_active: boolean }>("/ext-api/access/role-active", {
+    key,
+    is_active,
+  });
+
 /** `role: null` clears it — "no role", which is denied everything once the gate enforces. */
 export const setUserRole = (person_id: number, role: string | null) =>
   post<{ from: string | null; to: string | null }>("/ext-api/access/user-role", {
@@ -127,3 +143,31 @@ export const setUserOverride = (
     permission,
     effect,
   });
+
+/**
+ * The kill switch: `active` | `inactive`.
+ *
+ * Tokens live ~730 hours and there is no revocation list, so this is what
+ * makes "stop that person now" possible — the next request is refused whatever
+ * their token says. Refuses to deactivate the last active admin.
+ */
+export const setUserStatus = (person_id: number, status: "active" | "inactive") =>
+  post<{ person_id: number; status: string }>("/ext-api/access/user-status", {
+    person_id,
+    status,
+  });
+
+/**
+ * Delete an account outright. IRREVERSIBLE.
+ *
+ * Their permission overrides go with it. Nothing recreates `app_users` rows —
+ * they arrive by import — so the person does not get a fresh account by
+ * signing in again. Deactivating denies them just as completely and keeps the
+ * history, which is why the screen offers that first. Refuses self-deletion
+ * and the last active admin.
+ */
+export const deleteUser = (person_id: number) =>
+  post<{ person_id: number; overrides_removed: number }>(
+    "/ext-api/access/user-delete",
+    { person_id },
+  );
