@@ -177,6 +177,135 @@ export function FaceVerification() {
           </div>
         </div>
       </Card>
+
+      <EisMatchCard />
     </div>
+  );
+}
+
+/**
+ * The "Match with EIS" switch — its own card, its own load/save, so an error
+ * on one setting never blocks or masks the other.
+ */
+function EisMatchCard() {
+  const [loaded, setLoaded] = useState<api.EisMatchSettings | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [url, setUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<api.Err | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  async function load() {
+    const res = await api.getEisMatch();
+    if (!res.success) return setError(res);
+    setError(null);
+    setLoaded(res.data);
+    setEnabled(res.data.eis_match === "ON");
+    setUrl(res.data.eis_match_url);
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function save() {
+    setSaving(true);
+    setNotice(null);
+    const changedUrl = url.trim() !== (loaded?.eis_match_url ?? "");
+    const res = await api.putEisMatch(enabled ? "ON" : "OFF", changedUrl ? url.trim() : undefined);
+    setSaving(false);
+    if (!res.success) return setError(res);
+    setError(null);
+    setNotice(res.message ?? "Settings updated");
+    await load();
+  }
+
+  const dirty =
+    loaded !== null &&
+    (enabled !== (loaded.eis_match === "ON") || url.trim() !== loaded.eis_match_url);
+
+  return (
+    <Card title="Match with EIS">
+      <div className="space-y-5 p-4">
+        {error ? (
+          <Alert tone={error.code === "forbidden" ? "warning" : "danger"} title={error.message}>
+            {error.code === "forbidden"
+              ? "Your account does not hold admin.settings.manage."
+              : error.data?.host
+                ? `Rejected host: ${error.data.host}`
+                : null}
+          </Alert>
+        ) : null}
+        {notice ? <Alert tone="success">{notice}</Alert> : null}
+
+        {!loaded && !error ? (
+          <div className="flex items-center gap-3 text-ink-500">
+            <Spinner /> Loading…
+          </div>
+        ) : null}
+
+        {loaded ? (
+          <>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">Compare with the EIS studentship record</span>
+                <span className="block text-sm text-ink-500">
+                  Compare: {enabled ? "ON — mandatory" : "OFF"}. When checked, the
+                  comparison is mandatory: a card save is refused unless the
+                  student selfie matches the photo on the EIS studentship page
+                  for that card number, and a student enroll is refused unless
+                  every image matches the photo for the student's registered
+                  card. If EIS or the face-match service cannot answer, the save
+                  or enroll is refused too — never let through unchecked.
+                  Employees are not checked. Uses the face-match service URL
+                  above.
+                </span>
+              </span>
+            </label>
+
+            <Field
+              label="EIS base URL"
+              hint="The card number is appended — e.g. …/studentship/ + Qvuec1c774mKd4DNt. Put {card_number} in the URL to place it elsewhere."
+              error={error?.code === "invalid_url" ? error.message : undefined}
+            >
+              {(id) => (
+                <input
+                  id={id}
+                  className="field-input font-mono"
+                  value={url}
+                  placeholder="https://academic.eis.du.ac.bd/en/studentship/"
+                  onChange={(e) => setUrl(e.target.value)}
+                />
+              )}
+            </Field>
+
+            {enabled && !url.trim() ? (
+              <Alert tone="warning">
+                EIS matching cannot be turned on without a URL — the service will
+                refuse this save with a 422.
+              </Alert>
+            ) : null}
+
+            <div className="flex items-center gap-3">
+              <Button onClick={() => void save()} disabled={saving || !dirty}>
+                {saving ? "Saving…" : "Save"}
+              </Button>
+              {loaded.updated_at ? (
+                <span className="text-xs text-ink-500">
+                  Last changed {new Date(loaded.updated_at).toLocaleString()}
+                  {loaded.updated_by ? ` by ${loaded.updated_by}` : ""}
+                </span>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </div>
+    </Card>
   );
 }

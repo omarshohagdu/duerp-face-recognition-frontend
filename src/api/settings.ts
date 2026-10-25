@@ -101,3 +101,29 @@ export async function putFaceVerify(
   // the header whose absence produced the 400 this helper now surfaces.
   return envelope(await attendanceApi.put("/ext-api/settings/nfc-face-verify", body));
 }
+
+/**
+ * "Match with EIS" — `GET|PUT /ext-api/settings/eis-match`, same permission,
+ * same envelope and same URL semantics as the face toggle above. No
+ * `effective` block: these were never read from the environment.
+ */
+export interface EisMatchSettings {
+  eis_match: "ON" | "OFF";
+  eis_match_url: string;
+  updated_by: number | null;
+  updated_at: string | null;
+}
+
+export async function getEisMatch(): Promise<Result<EisMatchSettings>> {
+  return envelope<EisMatchSettings>(await attendanceApi.get("/ext-api/settings/eis-match"));
+}
+
+/** Omit `url` to leave the stored one alone; `""` clears it. */
+export async function putEisMatch(
+  enabled: "ON" | "OFF",
+  url?: string,
+): Promise<Result<{ eis_match: "ON" | "OFF"; eis_match_url: string }>> {
+  const body: Record<string, string> = { eis_match: enabled };
+  if (url !== undefined) body.eis_match_url = url;
+  return envelope(await attendanceApi.put("/ext-api/settings/eis-match", body));
+}
